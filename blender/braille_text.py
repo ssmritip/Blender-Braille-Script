@@ -1,19 +1,15 @@
 import bpy
-import mathutils
 
 def clear_scene():
     """
     Remove all mesh objects from the current scene
     to start fresh before generating Braille.
     """
-    # Deselect all objects first
     if bpy.ops.object.select_all.poll():
         bpy.ops.object.select_all(action='DESELECT')
-    # Select all mesh objects
     for obj in bpy.data.objects:
         if obj.type == 'MESH':
             obj.select_set(True)
-    # Delete selected objects
     if bpy.context.selected_objects:
         bpy.ops.object.delete()
 
@@ -29,35 +25,32 @@ def create_braille_dot(location, radius, height):
         bpy.types.Object: Reference to the created dot object.
     """
     bpy.ops.mesh.primitive_uv_sphere_add(
-        segments=32,
-        ring_count=16,
-        radius=radius,
-        location=location
+        segments=32, ring_count=16, radius=radius, location=location
     )
     dot_obj = bpy.context.active_object
     dot_obj.name = "BrailleDot"
 
     bpy.ops.object.mode_set(mode='EDIT')
     bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.bisect(plane_co=location, plane_no=(0, 0, 1), clear_inner=True)
+    bpy.ops.mesh.bisect(
+        plane_co=location, plane_no=(0, 0, 1), clear_inner=True
+    )
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # Manually scale the upper hemisphere vertices along Z
     for vert in dot_obj.data.vertices:
         if vert.co.z > 0:
             vert.co.z *= (height / radius)
 
-    # Add subdivision surface modifier for smoothness
     modifier = dot_obj.modifiers.new(name="Subdivision", type='SUBSURF')
-    modifier.levels = 2
-    modifier.render_levels = 2
+    modifier.levels = 1
+    modifier.render_levels = 1
 
     return dot_obj
 
 def generate_braille_text(text_input="Hello", dot_radius=0.5, dot_height=0.5,
                           dot_spacing_x=2.5, dot_spacing_y=2.5,
                           cell_spacing_x=6.2, line_spacing_y=10.0,
-                          base_height=3.0, padding_x=2.0, padding_y=2.0):
+                          base_height=3.0, padding_x=2.0, padding_y=2.0):    
     """
     Converts input text to 3D braille layout and generates a base plate underneath.
 
@@ -74,6 +67,7 @@ def generate_braille_text(text_input="Hello", dot_radius=0.5, dot_height=0.5,
         padding_y (float): Extra margin on the Y-axis.
     """
     clear_scene()
+
     braille_map = {
         'a': [1,0,0,0,0,0], 'b': [1,1,0,0,0,0], 'c': [1,0,0,1,0,0], 'd': [1,0,0,1,1,0],
         'e': [1,0,0,0,1,0], 'f': [1,1,0,1,0,0], 'g': [1,1,0,1,1,0], 'h': [1,1,0,0,1,0],
@@ -93,12 +87,15 @@ def generate_braille_text(text_input="Hello", dot_radius=0.5, dot_height=0.5,
         (dot_spacing_x, 2 * dot_spacing_y), (dot_spacing_x, dot_spacing_y), (dot_spacing_x, 0)
     ]
 
+    all_dots = []
+
     def add_cell(pattern, x, y):
         for i in range(6):
             if pattern[i]:
                 dx, dy = dot_positions[i]
                 loc = (x + dx, y + dy, base_height / 2)
-                create_braille_dot(loc, dot_radius, dot_height)
+                dot = create_braille_dot(loc, dot_radius, dot_height)
+                all_dots.append(dot)
 
     current_y = 0.0
     max_cells = 0
@@ -116,7 +113,6 @@ def generate_braille_text(text_input="Hello", dot_radius=0.5, dot_height=0.5,
                 cells += 1
                 continue
 
-            # Capital indicators
             if word.isupper() and len(word) > 1:
                 for _ in range(2):
                     add_cell(braille_map['CAPS'], current_x, current_y)
@@ -143,7 +139,6 @@ def generate_braille_text(text_input="Hello", dot_radius=0.5, dot_height=0.5,
     if max_cells == 0:
         return
 
-    # Base size calculations
     span_x = (max_cells - 1) * cell_spacing_x + dot_spacing_x
     top_y = 2 * dot_spacing_y
     bottom_y = -((num_lines - 1) * line_spacing_y)
@@ -151,7 +146,6 @@ def generate_braille_text(text_input="Hello", dot_radius=0.5, dot_height=0.5,
 
     geom_width = span_x + 2 * dot_radius
     geom_depth = span_y + 2 * dot_radius
-
     base_width = geom_width + 2 * padding_x
     base_depth = geom_depth + 2 * padding_y
 
@@ -159,27 +153,40 @@ def generate_braille_text(text_input="Hello", dot_radius=0.5, dot_height=0.5,
     center_y = (top_y + bottom_y) / 2
     center_z = 0
 
+    # Add base cube
     bpy.ops.mesh.primitive_cube_add(size=1, location=(center_x, center_y, center_z))
     base = bpy.context.active_object
     base.name = "BrailleBase"
     base.scale = (base_width, base_depth, base_height)
 
-    # Boolean union: apply union modifier for each dot
-    dot_objs = [obj for obj in bpy.data.objects if obj.type == 'MESH' and obj != base]
+    # Join all dots into one object
+    bpy.ops.object.select_all(action='DESELECT')
+    for dot in all_dots:
+        dot.select_set(True)
+    bpy.context.view_layer.objects.active = all_dots[0]
+    bpy.ops.object.join()
+    dots_joined = bpy.context.active_object
+    dots_joined.name = "BrailleDots"
+
+    # Apply boolean union modifier to base with all dots at once
+    bool_mod = base.modifiers.new(name="BoolUnion", type='BOOLEAN')
+    bool_mod.operation = 'UNION'
+    bool_mod.object = dots_joined
+    bool_mod.solver = 'EXACT'
+
     bpy.context.view_layer.objects.active = base
-    for dot in dot_objs:
-        bool_mod = base.modifiers.new(name=f"Union_{dot.name}", type='BOOLEAN')
-        bool_mod.operation = 'UNION'
-        bool_mod.object = dot
-        bpy.ops.object.modifier_apply(modifier=bool_mod.name)
-        bpy.data.objects.remove(dot, do_unlink=True)
+    bpy.ops.object.modifier_apply(modifier=bool_mod.name)
 
-    # Rename to input text
-    bpy.context.active_object.name = text_input.strip().replace('\n', ' ')[:100]
+    # Remove dots joined object
+    bpy.data.objects.remove(dots_joined, do_unlink=True)
 
-    print("Braille model generated successfully.")
+    # Rename base to original text
+    safe_name = text_input.strip().replace('\n', ' ')[:100]
+    base.name = safe_name
 
-text_to_braille = "Chain for Change"
+
+# Example usage:
+text_to_braille = "Chain for Changee"
 
 generate_braille_text(
     text_input=text_to_braille,
