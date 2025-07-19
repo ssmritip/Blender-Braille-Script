@@ -59,7 +59,11 @@ const paddingY = 3.0; // This now refers to padding along the Z-axis for the bas
  * @param text The input string.
  * @returns A THREE.Group containing the merged Braille model.
  */
-export function generateBraille3DModel(text: string): THREE.Group {
+
+export function generateBraille3DModel(
+  text: string,
+  unitScale: number
+): THREE.Group {
   const group = new THREE.Group();
   const geometries: THREE.BufferGeometry[] = [];
   const material = new THREE.MeshStandardMaterial({
@@ -72,17 +76,25 @@ export function generateBraille3DModel(text: string): THREE.Group {
     return group;
   }
 
+  // Scale all parameters by unitScale
+  const scaledDotRadius = dotRadius * unitScale;
+  const scaledDotHeight = dotHeight * unitScale;
+  const scaledDotSpacingX = dotSpacingX * unitScale;
+  const scaledDotSpacingY = dotSpacingY * unitScale;
+  const scaledCellSpacingX = cellSpacingX * unitScale;
+  const scaledLineSpacingY = lineSpacingY * unitScale;
+  const scaledBaseHeight = baseHeight * unitScale;
+  const scaledPaddingX = paddingX * unitScale;
+  const scaledPaddingY = paddingY * unitScale;
+
   // Define relative positions for the 6 dots within a Braille cell.
-  // X is horizontal, Y is vertical (height), Z is depth (where Braille dots are spaced vertically).
-  // To fix the flip, we're setting the top dots (1,4) to have the most negative Z-coordinate,
-  // and the bottom dots (3,6) to have Z=0. This will counteract the viewer's Z-axis inversion.
   const dotRelativePositions = [
-    new THREE.Vector3(0, 0, -2 * dotSpacingY), // Index 0 -> Dot 1 (top-left)
-    new THREE.Vector3(0, 0, -dotSpacingY), // Index 1 -> Dot 2 (middle-left)
+    new THREE.Vector3(0, 0, -2 * scaledDotSpacingY), // Index 0 -> Dot 1 (top-left)
+    new THREE.Vector3(0, 0, -scaledDotSpacingY), // Index 1 -> Dot 2 (middle-left)
     new THREE.Vector3(0, 0, 0), // Index 2 -> Dot 3 (bottom-left)
-    new THREE.Vector3(dotSpacingX, 0, -2 * dotSpacingY), // Index 3 -> Dot 4 (top-right)
-    new THREE.Vector3(dotSpacingX, 0, -dotSpacingY), // Index 4 -> Dot 5 (middle-right)
-    new THREE.Vector3(dotSpacingX, 0, 0), // Index 5 -> Dot 6 (bottom-right)
+    new THREE.Vector3(scaledDotSpacingX, 0, -2 * scaledDotSpacingY), // Index 3 -> Dot 4 (top-right)
+    new THREE.Vector3(scaledDotSpacingX, 0, -scaledDotSpacingY), // Index 4 -> Dot 5 (middle-right)
+    new THREE.Vector3(scaledDotSpacingX, 0, 0), // Index 5 -> Dot 6 (bottom-right)
   ];
 
   /**
@@ -130,12 +142,14 @@ export function generateBraille3DModel(text: string): THREE.Group {
           0, // Y-coordinate is constant for the base of the dots
           z + relPos.z // Z-coordinate controls the vertical spacing of dots within a cell and lines
         );
-        geometries.push(createDot(dotLocation, dotRadius, dotHeight));
+        geometries.push(
+          createDot(dotLocation, scaledDotRadius, scaledDotHeight)
+        );
       }
     }
   };
 
-  let currentZ = 0.0; // Z-axis usage for lines, starting from 0 (top)
+  let currentZ = 0.0;
   let maxCellsInLine = 0;
   const lines = text.split("\n");
   const numLines = lines.length;
@@ -149,30 +163,25 @@ export function generateBraille3DModel(text: string): THREE.Group {
       const word = words[wordIndex];
 
       if (!word) {
-        // Handle multiple spaces or leading/trailing spaces
-        currentX += cellSpacingX;
+        currentX += scaledCellSpacingX;
         cellsThisLine++;
         continue;
       }
 
       // --- Capitalization Logic ---
       if (word.length > 0 && word.toUpperCase() === word && word.length > 1) {
-        // All caps word (more than one letter)
-        // Add two CAPS indicators
         generateCell(brailleMap["CAPS"], currentX, currentZ);
-        currentX += cellSpacingX;
+        currentX += scaledCellSpacingX;
         cellsThisLine++;
         generateCell(brailleMap["CAPS"], currentX, currentZ);
-        currentX += cellSpacingX;
+        currentX += scaledCellSpacingX;
         cellsThisLine++;
       } else if (word.length > 0 && word[0] >= "A" && word[0] <= "Z") {
-        // Single capital letter
         generateCell(brailleMap["CAPS"], currentX, currentZ);
-        currentX += cellSpacingX;
+        currentX += scaledCellSpacingX;
         cellsThisLine++;
       }
 
-      // --- Generate Characters ---
       for (const char of word.toLowerCase()) {
         const pattern = brailleMap[char];
         if (pattern) {
@@ -181,16 +190,14 @@ export function generateBraille3DModel(text: string): THREE.Group {
           console.warn(
             `Character '${char}' not in Braille map. Using empty cell.`
           );
-          // Generate an empty cell for unknown characters
           generateCell([0, 0, 0, 0, 0, 0], currentX, currentZ);
         }
-        currentX += cellSpacingX;
+        currentX += scaledCellSpacingX;
         cellsThisLine++;
       }
 
-      // Add a space cell after each word (except the last one in the line)
       if (wordIndex < words.length - 1) {
-        currentX += cellSpacingX; // A space is just an empty cell
+        currentX += scaledCellSpacingX;
         cellsThisLine++;
       }
     }
@@ -199,7 +206,7 @@ export function generateBraille3DModel(text: string): THREE.Group {
       maxCellsInLine = cellsThisLine;
     }
 
-    currentZ -= lineSpacingY; // Move down (along Z-axis) for the next line
+    currentZ -= scaledLineSpacingY;
   }
 
   // --- Create the solid base ---
@@ -209,28 +216,31 @@ export function generateBraille3DModel(text: string): THREE.Group {
   }
 
   // Calculate the span of the dot origins (center points)
-  // The highest Z-coordinate for any dot within a cell is 0 (Dot 3/6).
-  // The lowest Z-coordinate for any dot within a cell is -2 * dotSpacingY (Dot 1/4).
-  const originSpanX = (maxCellsInLine - 1) * cellSpacingX + dotSpacingX;
-  const highestZOrigin = 0; // Highest Z-coordinate for a dot in a cell (relative to cell's Z)
-  const lowestZOrigin = -(numLines - 1) * lineSpacingY - 2 * dotSpacingY; // Lowest Z-coordinate for the last line's top dot
-  const originSpanZ = highestZOrigin - lowestZOrigin; // Total span along Z-axis
+  const originSpanX =
+    (maxCellsInLine - 1) * scaledCellSpacingX + scaledDotSpacingX;
+  const highestZOrigin = 0;
+  const lowestZOrigin =
+    -(numLines - 1) * scaledLineSpacingY - 2 * scaledDotSpacingY;
+  const originSpanZ = highestZOrigin - lowestZOrigin;
 
   // Calculate the full geometric bounding box by adding the dot radius on all sides
-  const geomWidth = originSpanX + 2 * dotRadius;
-  const geomDepth = originSpanZ + 2 * dotRadius; // Use geomDepth for the Z-dimension
+  const geomWidth = originSpanX + 2 * scaledDotRadius;
+  const geomDepth = originSpanZ + 2 * scaledDotRadius;
 
   // Calculate the final base dimensions including padding
-  const baseWidth = geomWidth + 2 * paddingX;
-  const baseDepth = geomDepth + 2 * paddingY; // Use baseDepth for the Z-dimension
+  const baseWidth = geomWidth + 2 * scaledPaddingX;
+  const baseDepth = geomDepth + 2 * scaledPaddingY;
 
   // Calculate the center of the base.
   const baseCenterX = originSpanX / 2;
-  const baseCenterZ = (highestZOrigin + lowestZOrigin) / 2; // Center along the Z-axis
-  const baseCenterY = -baseHeight / 2; // Base sits below the dots, with its top at Y=0
+  const baseCenterZ = (highestZOrigin + lowestZOrigin) / 2;
+  const baseCenterY = -scaledBaseHeight / 2;
 
-  const baseGeometry = new THREE.BoxGeometry(baseWidth, baseHeight, baseDepth);
-  // Translate the base: X for horizontal, Y for vertical position, Z for depth
+  const baseGeometry = new THREE.BoxGeometry(
+    baseWidth,
+    scaledBaseHeight,
+    baseDepth
+  );
   baseGeometry.translate(baseCenterX, baseCenterY, baseCenterZ);
 
   geometries.push(baseGeometry);

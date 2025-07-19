@@ -28,7 +28,7 @@ import {
 export default function HomePage() {
   const [text, setText] = useState("3D Braille");
   const [model, setModel] = useState<THREE.Group>(() =>
-    generateBraille3DModel(text)
+    generateBraille3DModel(text, 0.01)
   );
   const previousModelRef = useRef<THREE.Group | null>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -56,7 +56,7 @@ export default function HomePage() {
     }, 500);
 
     try {
-      const newModel = generateBraille3DModel(newText);
+      const newModel = generateBraille3DModel(newText, 0.01);
 
       // Dispose of the previous model
       if (previousModelRef.current) {
