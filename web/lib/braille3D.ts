@@ -62,7 +62,7 @@ const paddingY = 3.0; // This now refers to padding along the Z-axis for the bas
 
 export function generateBraille3DModel(
   text: string,
-  unitScale: number = 0.001
+  unitScale: number = 1
 ): THREE.Group {
   const group = new THREE.Group();
   const geometries: THREE.BufferGeometry[] = [];
