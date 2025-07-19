@@ -164,12 +164,15 @@ def generate_braille_text(text_input="Hello", dot_radius=0.5, dot_height=0.5,
     base.name = "BrailleBase"
     base.scale = (base_width, base_depth, base_height)
 
-    # Select and join all mesh objects
-    bpy.ops.object.select_all(action='DESELECT')
-    base.select_set(True)
+    # Boolean union: apply union modifier for each dot
+    dot_objs = [obj for obj in bpy.data.objects if obj.type == 'MESH' and obj != base]
     bpy.context.view_layer.objects.active = base
-    bpy.ops.object.select_by_type(type='MESH')
-    bpy.ops.object.join()
+    for dot in dot_objs:
+        bool_mod = base.modifiers.new(name=f"Union_{dot.name}", type='BOOLEAN')
+        bool_mod.operation = 'UNION'
+        bool_mod.object = dot
+        bpy.ops.object.modifier_apply(modifier=bool_mod.name)
+        bpy.data.objects.remove(dot, do_unlink=True)
 
     # Rename to input text
     bpy.context.active_object.name = text_input.strip().replace('\n', ' ')[:100]
