@@ -62,7 +62,7 @@ const paddingY = 3.0; // This now refers to padding along the Z-axis for the bas
 
 export function generateBraille3DModel(
   text: string,
-  unitScale: number
+  unitScale: number = 0.001
 ): THREE.Group {
   const group = new THREE.Group();
   const geometries: THREE.BufferGeometry[] = [];
@@ -259,6 +259,9 @@ export function generateBraille3DModel(
   const box = new THREE.Box3().setFromObject(group);
   const center = box.getCenter(new THREE.Vector3());
   group.position.sub(center);
+
+  // Rotate the model -90 degrees about the X axis for Blender compatibility
+  group.rotateX(THREE.MathUtils.degToRad(90));
 
   return group;
 }

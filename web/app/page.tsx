@@ -27,8 +27,9 @@ import {
 // The main page component for the application
 export default function HomePage() {
   const [text, setText] = useState("3D Braille");
+  // Default unit scale: 1 for meters, 0.001 for millimeters
   const [model, setModel] = useState<THREE.Group>(() =>
-    generateBraille3DModel(text, 0.01)
+    generateBraille3DModel(text)
   );
   const previousModelRef = useRef<THREE.Group | null>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -56,7 +57,7 @@ export default function HomePage() {
     }, 500);
 
     try {
-      const newModel = generateBraille3DModel(newText, 0.01);
+      const newModel = generateBraille3DModel(newText);
 
       // Dispose of the previous model
       if (previousModelRef.current) {
@@ -71,10 +72,10 @@ export default function HomePage() {
     }
   };
 
-  // Exports the current 3D model to a GLB file
+  // Exports the current 3D model in glb, gltf or stl format (default: stl)
 
   const [filename, setFilename] = useState(text);
-  const [fileType, setFileType] = useState<"glb" | "gltf" | "stl">("glb");
+  const [fileType, setFileType] = useState<"glb" | "gltf" | "stl">("stl");
 
   const handleFilenameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setFilename(event.target.value);
@@ -85,7 +86,7 @@ export default function HomePage() {
       // Set model scale to millimeters (assuming 1 unit = 1 mm)
       // You can adjust the scale factor if your model units differ
       const originalScale = model.scale.clone();
-      model.scale.set(1, 1, 1); // 1 unit = 1 mm
+      model.scale.set(1, 1, 1);
 
       if (fileType === "stl") {
         // Export STL using STLExporter

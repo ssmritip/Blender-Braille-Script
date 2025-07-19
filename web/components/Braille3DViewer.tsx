@@ -107,10 +107,10 @@ export function Braille3DViewer({ model }: Braille3DViewerProps) {
         preserveDrawingBuffer: false,
         antialias: true,
         alpha: true,
-        powerPreference: "default", // Use "default" instead of "high-performance" to be more conservative
+        powerPreference: "default",
       }}
     >
-      <Stage environment="city" intensity={0.6}>
+      <Stage environment="city" intensity={0.01}>
         <primitive object={model} />
       </Stage>
       <OrbitControls makeDefault />
