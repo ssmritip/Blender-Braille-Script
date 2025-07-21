@@ -34,7 +34,7 @@ import { Slider } from "@/components/ui/slider";
 export default function HomePage() {
   const [text, setText] = useState("3D Braille");
   const [maxCellsPerLine, setMaxCellsPerLine] = useState(40);
-  // Default unit scale: 1 for meters, 0.001 for millimeters
+  // Default unit scale: 1 for meters, 0.001 for millimeters (GLB and GLTF only, STL defaults to millimeters for unit scale: 1)
   const [model, setModel] = useState<THREE.Group>(() =>
     generateBraille3DModel(prepareBrailleText(text), 1, maxCellsPerLine)
   );
@@ -90,26 +90,32 @@ export default function HomePage() {
     const newMaxCells = value[0] || 40;
     setMaxCellsPerLine(newMaxCells);
 
-    try {
-      // Convert regular newlines to our custom delimiter before processing
-      const brailleFormattedText = prepareBrailleText(text);
-      const newModel = generateBraille3DModel(
-        brailleFormattedText,
-        1,
-        newMaxCells
-      );
-
-      // Dispose of the previous model
-      if (previousModelRef.current) {
-        disposeBraille3DModel(previousModelRef.current);
-      }
-
-      previousModelRef.current = model;
-      setModel(newModel);
-    } catch (error) {
-      console.error("Error generating 3D model:", error);
-      // Keep the previous model if generation fails
+    // Debounce model update when max cells per line changes
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
     }
+    debounceTimeoutRef.current = setTimeout(() => {
+      try {
+        // Convert regular newlines to our custom delimiter before processing
+        const brailleFormattedText = prepareBrailleText(text);
+        const newModel = generateBraille3DModel(
+          brailleFormattedText,
+          1,
+          newMaxCells
+        );
+
+        // Dispose of the previous model
+        if (previousModelRef.current) {
+          disposeBraille3DModel(previousModelRef.current);
+        }
+
+        previousModelRef.current = model;
+        setModel(newModel);
+      } catch (error) {
+        console.error("Error generating 3D model:", error);
+        // Keep the previous model if generation fails
+      }
+    }, 200);
   };
 
   // Exports the current 3D model in glb, gltf or stl format (default: stl)
@@ -201,8 +207,8 @@ export default function HomePage() {
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-2 sm:p-8">
       <Card className="w-full max-w-2xl shadow-none border-0 rounded-3xl bg-transparent">
         <CardHeader>
-          <CardTitle className="text-2xl sm:text-3xl font-bold text-center sm:pt-4">
-            3D Text to Braille Converter
+          <CardTitle className="text-2xl sm:text-4xl font-bold text-center sm:pt-4">
+            Tactil.
           </CardTitle>
           <CardDescription className="text-center">
             Type text to generate a 3D Braille model. Press Enter to create new
