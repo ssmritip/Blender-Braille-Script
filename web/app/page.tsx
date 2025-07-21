@@ -9,9 +9,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Braille3DViewer } from "@/components/Braille3DViewer";
-import { generateBraille3DModel, disposeBraille3DModel } from "@/lib/braille3D";
+import {
+  generateBraille3DModel,
+  disposeBraille3DModel,
+  prepareBrailleText,
+} from "@/lib/braille3D";
 import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
@@ -23,13 +28,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 
 // The main page component for the application
 export default function HomePage() {
   const [text, setText] = useState("3D Braille");
+  const [maxCellsPerLine, setMaxCellsPerLine] = useState(40);
   // Default unit scale: 1 for meters, 0.001 for millimeters
   const [model, setModel] = useState<THREE.Group>(() =>
-    generateBraille3DModel(text)
+    generateBraille3DModel(prepareBrailleText(text), 1, maxCellsPerLine)
   );
   const previousModelRef = useRef<THREE.Group | null>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -45,7 +52,7 @@ export default function HomePage() {
   }, []);
 
   // Handles changes to the input field and updates the Braille output
-  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newText = event.target.value;
     setText(newText);
     // Debounce filename update when text changes
@@ -57,7 +64,40 @@ export default function HomePage() {
     }, 500);
 
     try {
-      const newModel = generateBraille3DModel(newText);
+      // Convert regular newlines to our custom delimiter before processing
+      const brailleFormattedText = prepareBrailleText(newText);
+      const newModel = generateBraille3DModel(
+        brailleFormattedText,
+        1,
+        maxCellsPerLine
+      );
+
+      // Dispose of the previous model
+      if (previousModelRef.current) {
+        disposeBraille3DModel(previousModelRef.current);
+      }
+
+      previousModelRef.current = model;
+      setModel(newModel);
+    } catch (error) {
+      console.error("Error generating 3D model:", error);
+      // Keep the previous model if generation fails
+    }
+  };
+
+  // Handles changes to the line length limit
+  const handleLineLengthChange = (value: number[]) => {
+    const newMaxCells = value[0] || 40;
+    setMaxCellsPerLine(newMaxCells);
+
+    try {
+      // Convert regular newlines to our custom delimiter before processing
+      const brailleFormattedText = prepareBrailleText(text);
+      const newModel = generateBraille3DModel(
+        brailleFormattedText,
+        1,
+        newMaxCells
+      );
 
       // Dispose of the previous model
       if (previousModelRef.current) {
@@ -99,7 +139,7 @@ export default function HomePage() {
         const extension = "stl";
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `${filename || "braille"}.${extension}`;
+        link.download = `${filename || "3d-braille"}.${extension}`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -159,25 +199,26 @@ export default function HomePage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4 sm:p-8">
-      <Card className="w-full max-w-4xl shadow-lg">
+      <Card className="w-full max-w-4xl shadow-lg rounded-3xl">
         <CardHeader>
-          <CardTitle className="text-3xl font-bold">
+          <CardTitle className="text-2xl sm:text-3xl font-bold text-center pt-4">
             3D Text to Braille Converter
           </CardTitle>
-          <CardDescription>
-            Type text to generate a 3D Braille model. You can rotate and zoom
-            the model.
+          <CardDescription className="text-center">
+            Type text to generate a 3D Braille model. Press Enter to create new
+            lines. You can rotate and zoom the model.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
-            <Input
-              type="text"
+            <Textarea
               value={text}
               onChange={handleInputChange}
-              placeholder="Enter text to convert..."
-              className="text-lg p-4"
+              placeholder="Enter text to convert... (Press Enter for new lines)"
+              className="text-lg p-4 min-h-[100px] resize-y"
+              rows={4}
             />
+
             <div className="w-full h-96 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border">
               <Suspense
                 fallback={
@@ -189,6 +230,24 @@ export default function HomePage() {
                 <Braille3DViewer model={model} />
               </Suspense>
             </div>
+            <div className="flex gap-4 items-end">
+              <div className="flex-1">
+                <Label className="text-base font-semibold">
+                  Maximum Characters Per Line: {maxCellsPerLine} (
+                  {(maxCellsPerLine * 7).toFixed(1)} units)
+                </Label>
+                <div className="pt-2">
+                  <Slider
+                    value={[maxCellsPerLine]}
+                    onValueChange={handleLineLengthChange}
+                    min={10}
+                    max={100}
+                    step={1}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
             <div className="flex justify-center items-start w-full gap-2">
               <div className="flex-1">
                 <Label className="text-lg font-semibold">File Name</Label>
@@ -197,7 +256,7 @@ export default function HomePage() {
                   value={filename}
                   onChange={handleFilenameChange}
                   placeholder="Filename"
-                  className="text-lg w-full"
+                  className="text-base w-full"
                 />
               </div>
               <div className="flex-1">

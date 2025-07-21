@@ -54,15 +54,39 @@ const baseHeight = 3.0;
 const paddingX = 3.0;
 const paddingY = 3.0; // This now refers to padding along the Z-axis for the base
 
+// --- Line Break Delimiter ---
+export const NEWLINE_DELIMITER = "|NEWLINE|";
+
+/**
+ * Helper function to convert regular text with \n line breaks to the format expected by the Braille generator.
+ * @param text Text with regular \n line breaks
+ * @returns Text with |NEWLINE| delimiters
+ */
+export function prepareBrailleText(text: string): string {
+  return text.replace(/\n/g, NEWLINE_DELIMITER);
+}
+
+/**
+ * Helper function to convert Braille-formatted text back to regular text with \n line breaks.
+ * @param text Text with |NEWLINE| delimiters
+ * @returns Text with regular \n line breaks
+ */
+export function formatDisplayText(text: string): string {
+  return text.replace(new RegExp(`\\${NEWLINE_DELIMITER}`, "g"), "\n");
+}
+
 /**
  * Generates a complete 3D Braille model for the given text.
- * @param text The input string.
+ * @param text The input string. Use |NEWLINE| to create line breaks.
+ * @param unitScale Scale factor for all dimensions.
+ * @param maxCellsPerLine Maximum number of Braille cells per line before wrapping.
  * @returns A THREE.Group containing the merged Braille model.
  */
 
 export function generateBraille3DModel(
   text: string,
-  unitScale: number = 1
+  unitScale: number = 1,
+  maxCellsPerLine: number = 40
 ): THREE.Group {
   const group = new THREE.Group();
   const geometries: THREE.BufferGeometry[] = [];
@@ -149,23 +173,82 @@ export function generateBraille3DModel(
     }
   };
 
+  /**
+   * Calculates the number of cells a word will occupy, including capitalization.
+   * @param word The word to calculate cells for.
+   * @returns The number of Braille cells needed for the word.
+   */
+  const calculateWordCells = (word: string): number => {
+    if (!word) return 0;
+
+    let cells = 0;
+
+    // Check for capitalization indicators
+    if (word.length > 0 && word.toUpperCase() === word && word.length > 1) {
+      cells += 2; // Two CAPS cells for all-caps words
+    } else if (word.length > 0 && word[0] >= "A" && word[0] <= "Z") {
+      cells += 1; // One CAPS cell for first letter capitalization
+    }
+
+    // Add cells for each character
+    cells += word.length;
+
+    return cells;
+  };
+
   let currentZ = 0.0;
   let maxCellsInLine = 0;
-  const lines = text.split("\n");
-  const numLines = lines.length;
+  const lines = text.split("|NEWLINE|");
+  const processedLines: string[][] = [];
 
+  // Process each original line and apply word wrapping
   for (const line of lines) {
+    const words = line.split(" ").filter((word) => word.length > 0);
+    let currentLineWords: string[] = [];
+    let currentLineCells = 0;
+
+    for (const word of words) {
+      const wordCells = calculateWordCells(word);
+      const spaceCell = currentLineWords.length > 0 ? 1 : 0; // Space between words
+      const totalCellsNeeded = wordCells + spaceCell;
+
+      // Check if adding this word would exceed the line limit
+      if (
+        currentLineCells + totalCellsNeeded > maxCellsPerLine &&
+        currentLineWords.length > 0
+      ) {
+        // Start a new line
+        processedLines.push([...currentLineWords]);
+        currentLineWords = [word];
+        currentLineCells = wordCells;
+      } else {
+        // Add word to current line
+        currentLineWords.push(word);
+        currentLineCells += totalCellsNeeded;
+      }
+    }
+
+    // Add the last line if it has content
+    if (currentLineWords.length > 0) {
+      processedLines.push(currentLineWords);
+    } else if (words.length === 0) {
+      // Handle empty lines
+      processedLines.push([]);
+    }
+  }
+
+  // Generate Braille cells for all processed lines
+  for (const lineWords of processedLines) {
     let currentX = 0.0;
     let cellsThisLine = 0;
-    const words = line.split(" ");
 
-    for (let wordIndex = 0; wordIndex < words.length; wordIndex++) {
-      const word = words[wordIndex];
+    for (let wordIndex = 0; wordIndex < lineWords.length; wordIndex++) {
+      const word = lineWords[wordIndex];
 
-      if (!word) {
+      // Add space between words (except for the first word)
+      if (wordIndex > 0) {
         currentX += scaledCellSpacingX;
         cellsThisLine++;
-        continue;
       }
 
       // --- Capitalization Logic ---
@@ -182,6 +265,7 @@ export function generateBraille3DModel(
         cellsThisLine++;
       }
 
+      // Generate cells for each character in the word
       for (const char of word.toLowerCase()) {
         const pattern = brailleMap[char];
         if (pattern) {
@@ -195,19 +279,16 @@ export function generateBraille3DModel(
         currentX += scaledCellSpacingX;
         cellsThisLine++;
       }
-
-      if (wordIndex < words.length - 1) {
-        currentX += scaledCellSpacingX;
-        cellsThisLine++;
-      }
     }
 
     if (cellsThisLine > maxCellsInLine) {
       maxCellsInLine = cellsThisLine;
     }
 
-    currentZ -= scaledLineSpacingY;
+    currentZ += scaledLineSpacingY; // Changed from -= to += to fix line order
   }
+
+  const numLines = processedLines.length;
 
   // --- Create the solid base ---
   if (maxCellsInLine === 0) {
@@ -218,9 +299,8 @@ export function generateBraille3DModel(
   // Calculate the span of the dot origins (center points)
   const originSpanX =
     (maxCellsInLine - 1) * scaledCellSpacingX + scaledDotSpacingX;
-  const highestZOrigin = 0;
-  const lowestZOrigin =
-    -(numLines - 1) * scaledLineSpacingY - 2 * scaledDotSpacingY;
+  const highestZOrigin = (numLines - 1) * scaledLineSpacingY;
+  const lowestZOrigin = -2 * scaledDotSpacingY;
   const originSpanZ = highestZOrigin - lowestZOrigin;
 
   // Calculate the full geometric bounding box by adding the dot radius on all sides
