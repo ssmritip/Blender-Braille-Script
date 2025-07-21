@@ -198,10 +198,10 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-4 sm:p-8">
-      <Card className="w-full max-w-4xl shadow-lg rounded-3xl">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-2 sm:p-8">
+      <Card className="w-full max-w-2xl shadow-none border-0 rounded-3xl bg-transparent">
         <CardHeader>
-          <CardTitle className="text-2xl sm:text-3xl font-bold text-center pt-4">
+          <CardTitle className="text-2xl sm:text-3xl font-bold text-center sm:pt-4">
             3D Text to Braille Converter
           </CardTitle>
           <CardDescription className="text-center">
@@ -215,7 +215,7 @@ export default function HomePage() {
               value={text}
               onChange={handleInputChange}
               placeholder="Enter text to convert... (Press Enter for new lines)"
-              className="text-lg p-4 min-h-[100px] resize-y"
+              className="p-4 h-10 resize-y"
               rows={4}
             />
 
@@ -232,9 +232,11 @@ export default function HomePage() {
             </div>
             <div className="flex gap-4 items-end">
               <div className="flex-1">
-                <Label className="text-base font-semibold">
-                  Maximum Characters Per Line: {maxCellsPerLine} (
-                  {(maxCellsPerLine * 7).toFixed(1)} units)
+                <Label className="text-sm sm:text-base font-semibold flex">
+                  <div className="">Maximum Characters Per Line: </div>
+                  <div className="font-medium text-xs sm:text-base">
+                    {maxCellsPerLine} ({(maxCellsPerLine * 7).toFixed(1)} units)
+                  </div>
                 </Label>
                 <div className="pt-2">
                   <Slider
@@ -250,7 +252,9 @@ export default function HomePage() {
             </div>
             <div className="flex justify-center items-start w-full gap-2">
               <div className="flex-1">
-                <Label className="text-lg font-semibold">File Name</Label>
+                <Label className="text-base sm:text-lg font-semibold">
+                  File Name
+                </Label>
                 <Input
                   type="text"
                   value={filename}
@@ -260,7 +264,9 @@ export default function HomePage() {
                 />
               </div>
               <div className="flex-1">
-                <Label className="text-lg font-semibold">Export Format</Label>
+                <Label className="text-base sm:text-lg font-semibold">
+                  Export Format
+                </Label>
 
                 <Select
                   value={fileType}

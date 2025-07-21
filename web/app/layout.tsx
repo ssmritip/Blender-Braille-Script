@@ -1,17 +1,15 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Sora } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const fontSans = Inter({
+const sora = Sora({
   subsets: ["latin"],
-  variable: "--font-sans",
 });
 
 export const metadata: Metadata = {
-  title: "3D Text to Braille Converter",
-  description:
-    "A tool to convert text into an interactive 3D Braille model, built with Next.js, three.js, and shadcn/ui.",
+  title: "Tactil.",
+  description: "Language of touch, made real.",
 };
 
 export default function RootLayout({
@@ -25,7 +23,7 @@ export default function RootLayout({
       <body
         className={cn(
           "min-h-screen bg-background font-sans antialiased",
-          fontSans.variable
+          sora.className
         )}
       >
         {children}
