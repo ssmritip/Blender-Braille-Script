@@ -204,7 +204,7 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-2 sm:p-8">
+    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-2">
       <Card className="w-full max-w-2xl shadow-none border-0 rounded-3xl bg-transparent">
         <CardHeader>
           <CardTitle className="text-2xl sm:text-4xl font-bold text-center sm:pt-4">
@@ -258,7 +258,7 @@ export default function HomePage() {
             </div>
             <div className="flex justify-center items-start w-full gap-2">
               <div className="flex-1">
-                <Label className="text-base sm:text-lg font-semibold">
+                <Label className="text-sm sm:text-base font-semibold">
                   File Name
                 </Label>
                 <Input
@@ -270,7 +270,7 @@ export default function HomePage() {
                 />
               </div>
               <div className="flex-1">
-                <Label className="text-base sm:text-lg font-semibold">
+                <Label className="text-sm sm:text-base font-semibold">
                   Export Format
                 </Label>
 
