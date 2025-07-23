@@ -34,7 +34,7 @@ import Logo from "@/public/assets/tactil-logo.png";
 
 // The main page component for the application
 export default function HomePage() {
-  const [text, setText] = useState("3D Braille");
+  const [text, setText] = useState("Tactil.");
   const [maxCellsPerLine, setMaxCellsPerLine] = useState(40);
   const [baseHeight, setBaseHeight] = useState(3.0);
   const [paddingX, setPaddingX] = useState(3.0);
