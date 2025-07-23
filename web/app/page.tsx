@@ -7,7 +7,6 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,9 +36,19 @@ import Logo from "@/public/assets/tactil-logo.png";
 export default function HomePage() {
   const [text, setText] = useState("3D Braille");
   const [maxCellsPerLine, setMaxCellsPerLine] = useState(40);
+  const [baseHeight, setBaseHeight] = useState(3.0);
+  const [paddingX, setPaddingX] = useState(3.0);
+  const [paddingY, setPaddingY] = useState(3.0);
   // Default unit scale: 1 for meters, 0.001 for millimeters (GLB and GLTF only, STL defaults to millimeters for unit scale: 1)
   const [model, setModel] = useState<THREE.Group>(() =>
-    generateBraille3DModel(prepareBrailleText(text), 1, maxCellsPerLine)
+    generateBraille3DModel(
+      prepareBrailleText(text),
+      1,
+      maxCellsPerLine,
+      baseHeight,
+      paddingX,
+      paddingY
+    )
   );
   const previousModelRef = useRef<THREE.Group | null>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -72,7 +81,10 @@ export default function HomePage() {
       const newModel = generateBraille3DModel(
         brailleFormattedText,
         1,
-        maxCellsPerLine
+        maxCellsPerLine,
+        baseHeight,
+        paddingX,
+        paddingY
       );
 
       // Dispose of the previous model
@@ -104,7 +116,10 @@ export default function HomePage() {
         const newModel = generateBraille3DModel(
           brailleFormattedText,
           1,
-          newMaxCells
+          newMaxCells,
+          baseHeight,
+          paddingX,
+          paddingY
         );
 
         // Dispose of the previous model
@@ -119,6 +134,57 @@ export default function HomePage() {
         // Keep the previous model if generation fails
       }
     }, 200);
+  };
+
+  // Helper function to regenerate the model with current parameters
+  const regenerateModel = () => {
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+    debounceTimeoutRef.current = setTimeout(() => {
+      try {
+        const brailleFormattedText = prepareBrailleText(text);
+        const newModel = generateBraille3DModel(
+          brailleFormattedText,
+          1,
+          maxCellsPerLine,
+          baseHeight,
+          paddingX,
+          paddingY
+        );
+
+        // Dispose of the previous model
+        if (previousModelRef.current) {
+          disposeBraille3DModel(previousModelRef.current);
+        }
+
+        previousModelRef.current = model;
+        setModel(newModel);
+      } catch (error) {
+        console.error("Error generating 3D model:", error);
+      }
+    }, 200);
+  };
+
+  // Handles changes to base height
+  const handleBaseHeightChange = (value: number[]) => {
+    const newBaseHeight = value[0] || 3.0;
+    setBaseHeight(newBaseHeight);
+    regenerateModel();
+  };
+
+  // Handles changes to padding X
+  const handlePaddingXChange = (value: number[]) => {
+    const newPaddingX = value[0] || 3.0;
+    setPaddingX(newPaddingX);
+    regenerateModel();
+  };
+
+  // Handles changes to padding Y
+  const handlePaddingYChange = (value: number[]) => {
+    const newPaddingY = value[0] || 3.0;
+    setPaddingY(newPaddingY);
+    regenerateModel();
   };
 
   // Exports the current 3D model in glb, gltf or stl format (default: stl)
@@ -262,6 +328,64 @@ export default function HomePage() {
                     step={1}
                     className="w-full"
                   />
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex-1">
+                  <Label className="text-sm sm:text-base font-semibold flex">
+                    <div className="">Base Height: </div>
+                    <div className="font-medium text-xs sm:text-base">
+                      {baseHeight.toFixed(1)} units
+                    </div>
+                  </Label>
+                  <div className="pt-2">
+                    <Slider
+                      value={[baseHeight]}
+                      onValueChange={handleBaseHeightChange}
+                      min={1.0}
+                      max={10.0}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <Label className="text-sm sm:text-base font-semibold flex">
+                    <div className="">Padding X: </div>
+                    <div className="font-medium text-xs sm:text-base">
+                      {paddingX.toFixed(1)} units
+                    </div>
+                  </Label>
+                  <div className="pt-2">
+                    <Slider
+                      value={[paddingX]}
+                      onValueChange={handlePaddingXChange}
+                      min={0.5}
+                      max={10.0}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <Label className="text-sm sm:text-base font-semibold flex">
+                    <div className="">Padding Y: </div>
+                    <div className="font-medium text-xs sm:text-base">
+                      {paddingY.toFixed(1)} units
+                    </div>
+                  </Label>
+                  <div className="pt-2">
+                    <Slider
+                      value={[paddingY]}
+                      onValueChange={handlePaddingYChange}
+                      min={0.5}
+                      max={10.0}
+                      step={0.1}
+                      className="w-full"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

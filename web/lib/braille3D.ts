@@ -41,6 +41,22 @@ const brailleMap: { [key: string]: number[] } = {
   "0": [0, 1, 0, 1, 1, 0],
   CAPS: [0, 0, 0, 0, 0, 1], // Dot 6 indicates a capital letter.
   CAPS_WORD: [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1], // Two Dot 6 for all caps word
+  number_sign: [0, 0, 1, 1, 1, 1], // Dots 3-4-5-6: Placed before a sequence of digits.
+
+  // --- Punctuation (Grade 2, single-cell) ---
+  ".": [0, 1, 0, 0, 1, 1], // Period (Dots 2-5-6)
+  ",": [0, 1, 0, 0, 0, 0], // Comma (Dot 2)
+  "'": [0, 0, 1, 0, 0, 0], // Apostrophe (Dot 3)
+  "-": [0, 0, 1, 0, 0, 1], // Hyphen (Dots 3-6)
+  ";": [0, 1, 1, 0, 0, 0], // Semicolon (Dots 2-3)
+  ":": [0, 1, 0, 0, 1, 0], // Colon (Dots 2-5)
+  "?": [0, 1, 1, 0, 0, 1], // Question Mark (Dots 2-3-6)
+  "!": [0, 1, 1, 0, 1, 0], // Exclamation Mark (Dots 2-3-5)
+  "“": [0, 1, 1, 0, 0, 1], // Opening Quote (Dots 2-3-6, same as ?)
+  "”": [0, 0, 1, 0, 1, 1], // Closing Quote (Dots 3-5-6)
+  "(": [0, 1, 1, 0, 1, 0], // Opening Paren (Dots 2-3-5, same as !)
+  ")": [0, 0, 1, 0, 1, 1], // Closing Paren (Dots 3-5-6, same as ”)
+  "/": [0, 0, 1, 1, 0, 0], // Slash (Dots 3-4)
 };
 
 // --- Model Parameters ---
@@ -80,13 +96,19 @@ export function formatDisplayText(text: string): string {
  * @param text The input string. Use |NEWLINE| to create line breaks.
  * @param unitScale Scale factor for all dimensions.
  * @param maxCellsPerLine Maximum number of Braille cells per line before wrapping.
+ * @param customBaseHeight Custom base height (uses default if not provided).
+ * @param customPaddingX Custom padding along X-axis (uses default if not provided).
+ * @param customPaddingY Custom padding along Y-axis (uses default if not provided).
  * @returns A THREE.Group containing the merged Braille model.
  */
 
 export function generateBraille3DModel(
   text: string,
   unitScale: number = 1,
-  maxCellsPerLine: number = 40
+  maxCellsPerLine: number = 40,
+  customBaseHeight?: number,
+  customPaddingX?: number,
+  customPaddingY?: number
 ): THREE.Group {
   const group = new THREE.Group();
   const geometries: THREE.BufferGeometry[] = [];
@@ -107,9 +129,9 @@ export function generateBraille3DModel(
   const scaledDotSpacingY = dotSpacingY * unitScale;
   const scaledCellSpacingX = cellSpacingX * unitScale;
   const scaledLineSpacingY = lineSpacingY * unitScale;
-  const scaledBaseHeight = baseHeight * unitScale;
-  const scaledPaddingX = paddingX * unitScale;
-  const scaledPaddingY = paddingY * unitScale;
+  const scaledBaseHeight = (customBaseHeight ?? baseHeight) * unitScale;
+  const scaledPaddingX = (customPaddingX ?? paddingX) * unitScale;
+  const scaledPaddingY = (customPaddingY ?? paddingY) * unitScale;
 
   // Define relative positions for the 6 dots within a Braille cell.
   const dotRelativePositions = [
@@ -174,7 +196,16 @@ export function generateBraille3DModel(
   };
 
   /**
-   * Calculates the number of cells a word will occupy, including capitalization.
+   * Checks if a character is a digit (0-9)
+   * @param char The character to check
+   * @returns True if the character is a digit
+   */
+  const isDigit = (char: string): boolean => {
+    return char >= "0" && char <= "9";
+  };
+
+  /**
+   * Calculates the number of cells a word will occupy, including capitalization, number signs, and punctuation.
    * @param word The word to calculate cells for.
    * @returns The number of Braille cells needed for the word.
    */
@@ -182,16 +213,53 @@ export function generateBraille3DModel(
     if (!word) return 0;
 
     let cells = 0;
+    let i = 0;
 
-    // Check for capitalization indicators
-    if (word.length > 0 && word.toUpperCase() === word && word.length > 1) {
-      cells += 2; // Two CAPS cells for all-caps words
-    } else if (word.length > 0 && word[0] >= "A" && word[0] <= "Z") {
-      cells += 1; // One CAPS cell for first letter capitalization
+    while (i < word.length) {
+      const char = word[i];
+
+      // Handle capitalization indicators
+      if (char >= "A" && char <= "Z") {
+        // Check if this is part of an all-caps sequence
+        let isAllCaps = false;
+        if (i === 0 && word.length > 1) {
+          // Check if the whole word is uppercase letters
+          isAllCaps = word
+            .split("")
+            .every(
+              (c) =>
+                (c >= "A" && c <= "Z") ||
+                !((c >= "a" && c <= "z") || (c >= "A" && c <= "Z"))
+            );
+          if (
+            isAllCaps &&
+            word.split("").filter((c) => c >= "A" && c <= "Z").length > 1
+          ) {
+            cells += 2; // Two CAPS cells for all-caps words
+          } else {
+            cells += 1; // One CAPS cell for single capital letter
+          }
+        } else if (i > 0) {
+          cells += 1; // CAPS cell for capital letters in the middle of words
+        }
+        cells += 1; // The letter itself
+        i++;
+      }
+      // Handle number sequences
+      else if (isDigit(char)) {
+        cells += 1; // Number sign
+        // Count all consecutive digits
+        while (i < word.length && isDigit(word[i])) {
+          cells += 1; // Each digit
+          i++;
+        }
+      }
+      // Handle regular characters (letters and punctuation)
+      else {
+        cells += 1;
+        i++;
+      }
     }
-
-    // Add cells for each character
-    cells += word.length;
 
     return cells;
   };
@@ -251,33 +319,101 @@ export function generateBraille3DModel(
         cellsThisLine++;
       }
 
-      // --- Capitalization Logic ---
-      if (word.length > 0 && word.toUpperCase() === word && word.length > 1) {
-        generateCell(brailleMap["CAPS"], currentX, currentZ);
-        currentX += scaledCellSpacingX;
-        cellsThisLine++;
-        generateCell(brailleMap["CAPS"], currentX, currentZ);
-        currentX += scaledCellSpacingX;
-        cellsThisLine++;
-      } else if (word.length > 0 && word[0] >= "A" && word[0] <= "Z") {
-        generateCell(brailleMap["CAPS"], currentX, currentZ);
-        currentX += scaledCellSpacingX;
-        cellsThisLine++;
-      }
+      // --- Process each character in the word with proper indicators ---
+      let i = 0;
+      while (i < word.length) {
+        const char = word[i];
 
-      // Generate cells for each character in the word
-      for (const char of word.toLowerCase()) {
-        const pattern = brailleMap[char];
-        if (pattern) {
-          generateCell(pattern, currentX, currentZ);
-        } else {
-          console.warn(
-            `Character '${char}' not in Braille map. Using empty cell.`
-          );
-          generateCell([0, 0, 0, 0, 0, 0], currentX, currentZ);
+        // Handle capitalization indicators
+        if (char >= "A" && char <= "Z") {
+          // Check if this is part of an all-caps sequence
+          let isAllCaps = false;
+          if (i === 0 && word.length > 1) {
+            // Check if the whole word is uppercase letters
+            isAllCaps = word
+              .split("")
+              .every(
+                (c) =>
+                  (c >= "A" && c <= "Z") ||
+                  !((c >= "a" && c <= "z") || (c >= "A" && c <= "Z"))
+              );
+            if (
+              isAllCaps &&
+              word.split("").filter((c) => c >= "A" && c <= "Z").length > 1
+            ) {
+              // Two CAPS cells for all-caps words
+              generateCell(brailleMap["CAPS"], currentX, currentZ);
+              currentX += scaledCellSpacingX;
+              cellsThisLine++;
+              generateCell(brailleMap["CAPS"], currentX, currentZ);
+              currentX += scaledCellSpacingX;
+              cellsThisLine++;
+            } else {
+              // One CAPS cell for single capital letter
+              generateCell(brailleMap["CAPS"], currentX, currentZ);
+              currentX += scaledCellSpacingX;
+              cellsThisLine++;
+            }
+          } else if (i > 0) {
+            // CAPS cell for capital letters in the middle of words
+            generateCell(brailleMap["CAPS"], currentX, currentZ);
+            currentX += scaledCellSpacingX;
+            cellsThisLine++;
+          }
+
+          // Generate the letter itself
+          const lowerChar = char.toLowerCase();
+          const pattern = brailleMap[lowerChar];
+          if (pattern) {
+            generateCell(pattern, currentX, currentZ);
+          } else {
+            console.warn(
+              `Character '${lowerChar}' not in Braille map. Using empty cell.`
+            );
+            generateCell([0, 0, 0, 0, 0, 0], currentX, currentZ);
+          }
+          currentX += scaledCellSpacingX;
+          cellsThisLine++;
+          i++;
         }
-        currentX += scaledCellSpacingX;
-        cellsThisLine++;
+        // Handle number sequences
+        else if (isDigit(char)) {
+          // Add number sign before the first digit in a sequence
+          generateCell(brailleMap["number_sign"], currentX, currentZ);
+          currentX += scaledCellSpacingX;
+          cellsThisLine++;
+
+          // Generate all consecutive digits
+          while (i < word.length && isDigit(word[i])) {
+            const digitPattern = brailleMap[word[i]];
+            if (digitPattern) {
+              generateCell(digitPattern, currentX, currentZ);
+            } else {
+              console.warn(
+                `Digit '${word[i]}' not in Braille map. Using empty cell.`
+              );
+              generateCell([0, 0, 0, 0, 0, 0], currentX, currentZ);
+            }
+            currentX += scaledCellSpacingX;
+            cellsThisLine++;
+            i++;
+          }
+        }
+        // Handle regular characters (letters and punctuation)
+        else {
+          const pattern = brailleMap[char];
+          if (pattern) {
+            generateCell(pattern, currentX, currentZ);
+          } else {
+            console.warn(
+              `Character '${char}' not in Braille map. Using empty cell.`
+            );
+            generateCell([0, 0, 0, 0, 0, 0], currentX, currentZ);
+          }
+          currentX += scaledCellSpacingX;
+          cellsThisLine++;
+          i++;
+        }
       }
     }
 
