@@ -207,17 +207,17 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-start bg-gray-100 dark:bg-gray-900 p-2">
+    <main className="flex min-h-screen flex-col items-center justify-start bg-gray-100 dark:bg-gray-900 p-2 w-full">
       <Image
         src={Logo}
         alt="Tactil Logo"
         width={100}
         height={100}
-        className="fixed w-10 h-10 top-4 left-4 rounded-lg shadow-md"
+        className="fixed w-10 h-10 top-4 left-4 rounded-lg shadow-md hidden sm:block "
       />
 
       <Navbar />
-      <Card className="w-full max-w-2xl shadow-none border-0 rounded-3xl bg-transparent mt-24">
+      <Card className="w-full max-w-2xl shadow-none border-0 rounded-3xl bg-transparent mt-20 sm:mt-24">
         <CardHeader>
           <CardDescription className="text-center">
             Type text to generate a 3D Braille model. Press Enter to create new
@@ -234,7 +234,7 @@ export default function HomePage() {
               rows={4}
             />
 
-            <div className="w-full h-96 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border">
+            <div className="w-full h-72 md:h-96 sm:h-84 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border">
               <Suspense
                 fallback={
                   <div className="flex items-center justify-center h-full">
