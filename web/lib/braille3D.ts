@@ -123,7 +123,7 @@ export function generateBraille3DModel(
 
   /**
    * Creates a single 3D dome-shaped Braille dot (a hemisphere).
-   * @param location The (x, y, z) coordinates for the center of the dot's base.
+   * @param location The (x, y, z) coordinates for the center of the dot's base.386
    * @param radius The radius of the spherical part of the dot.
    * @param height The desired height of the dome.
    * @returns A THREE.BufferGeometry for the dot.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, Suspense, useEffect, useRef } from "react";
+import Image from "next/image";
 import {
   Card,
   CardContent,
@@ -29,6 +30,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import Navbar from "@/components/Navbar";
+import Logo from "@/public/assets/tactil-logo.png";
 
 // The main page component for the application
 export default function HomePage() {
@@ -204,12 +207,18 @@ export default function HomePage() {
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 p-2">
-      <Card className="w-full max-w-2xl shadow-none border-0 rounded-3xl bg-transparent">
+    <main className="flex min-h-screen flex-col items-center justify-start bg-gray-100 dark:bg-gray-900 p-2">
+      <Image
+        src={Logo}
+        alt="Tactil Logo"
+        width={100}
+        height={100}
+        className="fixed w-10 h-10 top-4 left-4 rounded-lg shadow-md"
+      />
+
+      <Navbar />
+      <Card className="w-full max-w-2xl shadow-none border-0 rounded-3xl bg-transparent mt-24">
         <CardHeader>
-          <CardTitle className="text-2xl sm:text-4xl font-bold text-center sm:pt-4">
-            Tactil.
-          </CardTitle>
           <CardDescription className="text-center">
             Type text to generate a 3D Braille model. Press Enter to create new
             lines. You can rotate and zoom the model.
