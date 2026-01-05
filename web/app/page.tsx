@@ -51,7 +51,7 @@ export default function HomePage() {
     )
   );
   const previousModelRef = useRef<THREE.Group | null>(null);
-  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimeoutRef = useRef<number | null>(null);
 
   // Clean up previous model when component unmounts
   useEffect(() => {
