@@ -214,6 +214,17 @@ export function generateBraille3DModel(
 
     let cells = 0;
     let i = 0;
+    // Check if the entire word is all-caps once at the beginning
+    const isAllCapsWord =
+      word.length > 1 &&
+      word
+        .split("")
+        .every(
+          (c) =>
+            (c >= "A" && c <= "Z") ||
+            !((c >= "a" && c <= "z") || (c >= "A" && c <= "Z"))
+        ) &&
+      word.split("").filter((c) => c >= "A" && c <= "Z").length > 1;
 
     while (i < word.length) {
       const char = word[i];
@@ -221,27 +232,14 @@ export function generateBraille3DModel(
       // Handle capitalization indicators
       if (char >= "A" && char <= "Z") {
         // Check if this is part of an all-caps sequence
-        let isAllCaps = false;
-        if (i === 0 && word.length > 1) {
-          // Check if the whole word is uppercase letters
-          isAllCaps = word
-            .split("")
-            .every(
-              (c) =>
-                (c >= "A" && c <= "Z") ||
-                !((c >= "a" && c <= "z") || (c >= "A" && c <= "Z"))
-            );
-          if (
-            isAllCaps &&
-            word.split("").filter((c) => c >= "A" && c <= "Z").length > 1
-          ) {
-            cells += 2; // Two CAPS cells for all-caps words
-          } else {
-            cells += 1; // One CAPS cell for single capital letter
-          }
-        } else if (i > 0) {
-          cells += 1; // CAPS cell for capital letters in the middle of words
+        if (i === 0 && isAllCapsWord) {
+          cells += 2; // Two CAPS cells for all-caps words
+        } else if (i === 0 && !isAllCapsWord) {
+          cells += 1; // One CAPS cell for single capital letter at start
+        } else if (i > 0 && !isAllCapsWord) {
+          cells += 1; // CAPS cell for capital letters in the middle of words (but not in all-caps words)
         }
+        // If isAllCapsWord and i > 0, skip the CAPS indicator
         cells += 1; // The letter itself
         i++;
       }
@@ -321,45 +319,44 @@ export function generateBraille3DModel(
 
       // --- Process each character in the word with proper indicators ---
       let i = 0;
+      // Check if the entire word is all-caps once at the beginning
+      const isAllCapsWord =
+        word.length > 1 &&
+        word
+          .split("")
+          .every(
+            (c) =>
+              (c >= "A" && c <= "Z") ||
+              !((c >= "a" && c <= "z") || (c >= "A" && c <= "Z"))
+          ) &&
+        word.split("").filter((c) => c >= "A" && c <= "Z").length > 1;
+
       while (i < word.length) {
         const char = word[i];
 
         // Handle capitalization indicators
         if (char >= "A" && char <= "Z") {
           // Check if this is part of an all-caps sequence
-          let isAllCaps = false;
-          if (i === 0 && word.length > 1) {
-            // Check if the whole word is uppercase letters
-            isAllCaps = word
-              .split("")
-              .every(
-                (c) =>
-                  (c >= "A" && c <= "Z") ||
-                  !((c >= "a" && c <= "z") || (c >= "A" && c <= "Z"))
-              );
-            if (
-              isAllCaps &&
-              word.split("").filter((c) => c >= "A" && c <= "Z").length > 1
-            ) {
-              // Two CAPS cells for all-caps words
-              generateCell(brailleMap["CAPS"], currentX, currentZ);
-              currentX += scaledCellSpacingX;
-              cellsThisLine++;
-              generateCell(brailleMap["CAPS"], currentX, currentZ);
-              currentX += scaledCellSpacingX;
-              cellsThisLine++;
-            } else {
-              // One CAPS cell for single capital letter
-              generateCell(brailleMap["CAPS"], currentX, currentZ);
-              currentX += scaledCellSpacingX;
-              cellsThisLine++;
-            }
-          } else if (i > 0) {
-            // CAPS cell for capital letters in the middle of words
+          if (i === 0 && isAllCapsWord) {
+            // Two CAPS cells for all-caps words
+            generateCell(brailleMap["CAPS"], currentX, currentZ);
+            currentX += scaledCellSpacingX;
+            cellsThisLine++;
+            generateCell(brailleMap["CAPS"], currentX, currentZ);
+            currentX += scaledCellSpacingX;
+            cellsThisLine++;
+          } else if (i === 0 && !isAllCapsWord) {
+            // One CAPS cell for single capital letter at start
+            generateCell(brailleMap["CAPS"], currentX, currentZ);
+            currentX += scaledCellSpacingX;
+            cellsThisLine++;
+          } else if (i > 0 && !isAllCapsWord) {
+            // CAPS cell for capital letters in the middle of words (but not in all-caps words)
             generateCell(brailleMap["CAPS"], currentX, currentZ);
             currentX += scaledCellSpacingX;
             cellsThisLine++;
           }
+          // If isAllCapsWord and i > 0, skip the CAPS indicator
 
           // Generate the letter itself
           const lowerChar = char.toLowerCase();
