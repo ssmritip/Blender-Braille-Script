@@ -32,7 +32,6 @@ import { Slider } from "@/components/ui/slider";
 import Navbar from "@/components/Navbar";
 import Logo from "@/public/assets/tactil-logo.png";
 
-// The main page component for the application
 export default function HomePage() {
   const [text, setText] = useState("Tactil.");
   const [maxCellsPerLine, setMaxCellsPerLine] = useState(40);
@@ -51,7 +50,7 @@ export default function HomePage() {
     )
   );
   const previousModelRef = useRef<THREE.Group | null>(null);
-  const debounceTimeoutRef = useRef<number | null>(null);
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Clean up previous model when component unmounts
   useEffect(() => {
@@ -59,7 +58,6 @@ export default function HomePage() {
       if (previousModelRef.current) {
         disposeBraille3DModel(previousModelRef.current);
       }
-      // Note: Current model will be handled by the next model generation or unmount
     };
   }, []);
 
