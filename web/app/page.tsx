@@ -294,7 +294,7 @@ export default function HomePage() {
               value={text}
               onChange={handleInputChange}
               placeholder="Enter text to convert... (Press Enter for new lines)"
-              className="p-4 h-10 resize-y"
+              className="p-4 h-10 resize-none"
               rows={4}
             />
 
