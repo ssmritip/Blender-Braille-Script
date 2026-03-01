@@ -60,12 +60,12 @@ const brailleMap: { [key: string]: number[] } = {
 };
 
 // --- Model Parameters ---
-const dotRadius = 0.85;
+const dotRadius = 0.7;
 const dotHeight = 0.768612;
-const dotSpacingX = 2.5;
-const dotSpacingY = 2.5; // This now refers to the spacing along the Z-axis in Three.js
-const cellSpacingX = 7;
-const lineSpacingY = 10.0; // This now refers to the spacing along the Z-axis for lines in Three.js
+const dotSpacingX = 2.3;
+const dotSpacingY = 2.3; // This now refers to the spacing along the Z-axis in Three.js
+const cellSpacingX = 5.7;
+const lineSpacingY = 9.2; // This now refers to the spacing along the Z-axis for lines in Three.js
 const baseHeight = 3.0;
 const paddingX = 3.0;
 const paddingY = 3.0; // This now refers to padding along the Z-axis for the base
