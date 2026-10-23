@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, Suspense, useEffect, useRef } from "react";
+import { useState, Suspense, useEffect, useMemo, useRef } from "react";
 import Image from "next/image";
 import {
   Card,
@@ -12,11 +12,28 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Braille3DViewer } from "@/components/Braille3DViewer";
+import { BrailleKeyboard } from "@/components/BrailleKeyboard";
+import { BraillePreview } from "@/components/BraillePreview";
+import { ChoiceGroup } from "@/components/ChoiceGroup";
+import { DotGrid } from "@/components/DotGrid";
 import {
   generateBraille3DModel,
   disposeBraille3DModel,
-  prepareBrailleText,
+  ModelVariant,
 } from "@/lib/braille3D";
+import { Cell, cellToUnicode, describeCell } from "@/lib/braille/cells";
+import {
+  DotKeyboardState,
+  dotKeyboardCells,
+  emptyDotKeyboardState,
+} from "@/lib/braille/dotKeyboard";
+import {
+  getLanguage,
+  languages,
+  translateText,
+  wrapLines,
+} from "@/lib/braille/translate";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import * as THREE from "three";
 import { GLTFExporter } from "three/examples/jsm/exporters/GLTFExporter.js";
 import { STLExporter } from "three/examples/jsm/exporters/STLExporter.js";
@@ -32,231 +49,123 @@ import { Slider } from "@/components/ui/slider";
 import Navbar from "@/components/Navbar";
 import Logo from "@/public/assets/tactil-logo.png";
 
+type InputMode = "text" | "dots";
+type FileType = "glb" | "gltf" | "stl";
+
+const downloadBlob = (blob: Blob, filename: string) => {
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+};
+
+/** Default file name from the typed text: first line, without characters that break file names. */
+const filenameFromText = (text: string) =>
+  text.split("\n")[0].replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 60);
+
 export default function HomePage() {
+  const [inputMode, setInputMode] = useState<InputMode>("text");
+  const [languageId, setLanguageId] = useState("en");
   const [text, setText] = useState("Tactil.");
+  const [dotKeyboard, setDotKeyboard] = useState<DotKeyboardState>(
+    emptyDotKeyboardState
+  );
+  const [customCell, setCustomCell] = useState<Cell>(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const [maxCellsPerLine, setMaxCellsPerLine] = useState(40);
   const [baseHeight, setBaseHeight] = useState(3.0);
   const [paddingX, setPaddingX] = useState(3.0);
   const [paddingY, setPaddingY] = useState(3.0);
-  // Default unit scale: 1 for meters, 0.001 for millimeters (GLB and GLTF only, STL defaults to millimeters for unit scale: 1)
-  const [model, setModel] = useState<THREE.Group>(() =>
-    generateBraille3DModel(
-      prepareBrailleText(text),
-      1,
-      maxCellsPerLine,
-      baseHeight,
-      paddingX,
-      paddingY
-    )
+
+  const [filenameOverride, setFilenameOverride] = useState<string | null>(null);
+  const [fileType, setFileType] = useState<FileType>("stl");
+  const [stlVariant, setStlVariant] = useState<ModelVariant>("print-ready");
+
+  const language = getLanguage(languageId);
+
+  // Sliders are debounced so dragging does not rebuild the model on every step.
+  const sliderValues = useMemo(
+    () => ({ maxCellsPerLine, baseHeight, paddingX, paddingY }),
+    [maxCellsPerLine, baseHeight, paddingX, paddingY]
   );
-  const previousModelRef = useRef<THREE.Group | null>(null);
-  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const params = useDebouncedValue(sliderValues, 200);
 
-  // Clean up previous model when component unmounts
-  useEffect(() => {
-    return () => {
-      if (previousModelRef.current) {
-        disposeBraille3DModel(previousModelRef.current);
-      }
-    };
-  }, []);
+  // Braille cells, wrapped exactly as they will be printed.
+  const lines = useMemo(() => {
+    const source =
+      inputMode === "text"
+        ? translateText(text, languageId)
+        : [dotKeyboardCells(dotKeyboard)];
+    return wrapLines(source, params.maxCellsPerLine);
+  }, [inputMode, text, languageId, dotKeyboard, params.maxCellsPerLine]);
 
-  // Handles changes to the input field and updates the Braille output
-  const handleInputChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = event.target.value;
-    setText(newText);
-    // Debounce filename update when text changes
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-    debounceTimeoutRef.current = setTimeout(() => {
-      setFilename(newText);
-    }, 500);
-
+  // The preview always shows the print-ready model; both variants look the same.
+  const model = useMemo(() => {
     try {
-      // Convert regular newlines to our custom delimiter before processing
-      const brailleFormattedText = prepareBrailleText(newText);
-      const newModel = generateBraille3DModel(
-        brailleFormattedText,
-        1,
-        maxCellsPerLine,
-        baseHeight,
-        paddingX,
-        paddingY
-      );
-
-      // Dispose of the previous model
-      if (previousModelRef.current) {
-        disposeBraille3DModel(previousModelRef.current);
-      }
-
-      previousModelRef.current = model;
-      setModel(newModel);
+      return generateBraille3DModel(lines, params);
     } catch (error) {
       console.error("Error generating 3D model:", error);
-      // Keep the previous model if generation fails
+      return new THREE.Group();
     }
-  };
+  }, [lines, params]);
 
-  // Handles changes to the line length limit
-  const handleLineLengthChange = (value: number[]) => {
-    const newMaxCells = value[0] || 40;
-    setMaxCellsPerLine(newMaxCells);
+  // Free the GPU resources of a model once it has been replaced.
+  useEffect(() => () => disposeBraille3DModel(model), [model]);
 
-    // Debounce model update when max cells per line changes
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-    debounceTimeoutRef.current = setTimeout(() => {
-      try {
-        // Convert regular newlines to our custom delimiter before processing
-        const brailleFormattedText = prepareBrailleText(text);
-        const newModel = generateBraille3DModel(
-          brailleFormattedText,
-          1,
-          newMaxCells,
-          baseHeight,
-          paddingX,
-          paddingY
-        );
+  const filename =
+    filenameOverride ??
+    (inputMode === "text" ? filenameFromText(text) : "braille");
 
-        // Dispose of the previous model
-        if (previousModelRef.current) {
-          disposeBraille3DModel(previousModelRef.current);
-        }
-
-        previousModelRef.current = model;
-        setModel(newModel);
-      } catch (error) {
-        console.error("Error generating 3D model:", error);
-        // Keep the previous model if generation fails
-      }
-    }, 200);
-  };
-
-  // Helper function to regenerate the model with current parameters
-  const regenerateModel = () => {
-    if (debounceTimeoutRef.current) {
-      clearTimeout(debounceTimeoutRef.current);
-    }
-    debounceTimeoutRef.current = setTimeout(() => {
-      try {
-        const brailleFormattedText = prepareBrailleText(text);
-        const newModel = generateBraille3DModel(
-          brailleFormattedText,
-          1,
-          maxCellsPerLine,
-          baseHeight,
-          paddingX,
-          paddingY
-        );
-
-        // Dispose of the previous model
-        if (previousModelRef.current) {
-          disposeBraille3DModel(previousModelRef.current);
-        }
-
-        previousModelRef.current = model;
-        setModel(newModel);
-      } catch (error) {
-        console.error("Error generating 3D model:", error);
-      }
-    }, 200);
-  };
-
-  // Handles changes to base height
-  const handleBaseHeightChange = (value: number[]) => {
-    const newBaseHeight = value[0] || 3.0;
-    setBaseHeight(newBaseHeight);
-    regenerateModel();
-  };
-
-  // Handles changes to padding X
-  const handlePaddingXChange = (value: number[]) => {
-    const newPaddingX = value[0] || 3.0;
-    setPaddingX(newPaddingX);
-    regenerateModel();
-  };
-
-  // Handles changes to padding Y
-  const handlePaddingYChange = (value: number[]) => {
-    const newPaddingY = value[0] || 3.0;
-    setPaddingY(newPaddingY);
-    regenerateModel();
+  // Inserts text at the cursor in the textarea (used by the custom cell picker).
+  const insertAtCursor = (insert: string) => {
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? text.length;
+    const end = textarea?.selectionEnd ?? text.length;
+    setText(text.slice(0, start) + insert + text.slice(end));
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      textarea?.setSelectionRange(start + insert.length, start + insert.length);
+    });
   };
 
   // Exports the current 3D model in glb, gltf or stl format (default: stl)
-
-  const [filename, setFilename] = useState(text);
-  const [fileType, setFileType] = useState<"glb" | "gltf" | "stl">("stl");
-
-  const handleFilenameChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setFilename(event.target.value);
-  };
-
   const handleExport = () => {
+    const name = filename.trim() || "braille";
     try {
-      // Set model scale to millimeters (assuming 1 unit = 1 mm)
-      // You can adjust the scale factor if your model units differ
-      const originalScale = model.scale.clone();
-      model.scale.set(1, 1, 1);
-
       if (fileType === "stl") {
-        // Export STL using STLExporter
-        const stlExporter = new STLExporter();
-        const stlString = stlExporter.parse(model);
-        // Restore original scale after export
-        model.scale.copy(originalScale);
+        const exportModel =
+          stlVariant === "print-ready"
+            ? model
+            : generateBraille3DModel(lines, { ...params, variant: stlVariant });
+        exportModel.updateMatrixWorld(true);
+        const stl = new STLExporter().parse(exportModel, { binary: true });
+        if (exportModel !== model) disposeBraille3DModel(exportModel);
 
-        const blob = new Blob([stlString], { type: "model/stl" });
-        const extension = "stl";
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `${filename || "3d-braille"}.${extension}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        downloadBlob(
+          new Blob([stl.buffer as ArrayBuffer], { type: "model/stl" }),
+          `${name}.stl`
+        );
         return;
       }
 
-      const exporter = new GLTFExporter();
-      exporter.parse(
+      new GLTFExporter().parse(
         model,
         (result) => {
-          // Restore original scale after export
-          model.scale.copy(originalScale);
-
-          let blob: Blob | null = null;
-          let extension: string | null = null;
-          if (fileType === "glb") {
-            blob = new Blob([result as ArrayBuffer], {
-              type: "application/octet-stream",
-            });
-            extension = "glb";
-          } else if (fileType === "gltf") {
-            blob = new Blob([JSON.stringify(result, null, 2)], {
-              type: "application/json",
-            });
-            extension = "gltf";
-          } else if (fileType === "blend") {
-            alert(
-              "Export to Blender (.blend) is not supported. Please use GLB, GLTF, or STL."
-            );
-            return;
-          }
-          if (blob && extension) {
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = `${filename || "braille"}.${extension}`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-          }
+          const blob =
+            fileType === "glb"
+              ? new Blob([result as ArrayBuffer], {
+                  type: "application/octet-stream",
+                })
+              : new Blob([JSON.stringify(result, null, 2)], {
+                  type: "application/json",
+                });
+          downloadBlob(blob, `${name}.${fileType}`);
         },
         (error) => {
-          // Restore original scale if error occurs
-          model.scale.copy(originalScale);
-
           console.error("An error happened during parsing", error);
           alert(
             "Failed to export 3D model. Please try again or refresh the page."
@@ -269,6 +178,9 @@ export default function HomePage() {
       alert("Failed to export 3D model. Please try again or refresh the page.");
     }
   };
+
+  const toggleCustomDot = (dot: number) =>
+    setCustomCell((cell) => cell ^ (1 << (dot - 1)));
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-start bg-gray-100 dark:bg-gray-900 p-2 w-full">
@@ -283,22 +195,134 @@ export default function HomePage() {
       <Navbar />
       <Card className="w-full max-w-2xl shadow-none border-0 rounded-3xl bg-transparent mt-20 sm:mt-24">
         <CardHeader>
-          <CardDescription className="text-center">
-            Type text to generate a 3D Braille model. Press Enter to create new
-            lines. You can rotate and zoom the model.
+          <CardDescription className="text-center text-base text-gray-700 dark:text-gray-300">
+            Type text or dot numbers to generate a 3D Braille label. Check the
+            preview, then download the file for 3D printing.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
-            <Textarea
-              value={text}
-              onChange={handleInputChange}
-              placeholder="Enter text to convert... (Press Enter for new lines)"
-              className="p-4 h-10 resize-none"
-              rows={4}
+            <ChoiceGroup<InputMode>
+              legend="Input mode"
+              name="input-mode"
+              value={inputMode}
+              onChange={setInputMode}
+              options={[
+                {
+                  value: "text",
+                  label: "Text",
+                  description: "Type words; they are translated to Braille.",
+                },
+                {
+                  value: "dots",
+                  label: "Braille keyboard (dots)",
+                  description:
+                    "Type dot numbers 1–6 to build each cell. Works for any language.",
+                },
+              ]}
             />
 
-            <div className="w-full h-72 md:h-96 sm:h-84 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border">
+            {inputMode === "text" ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
+                  <Label
+                    htmlFor="language"
+                    className="text-sm sm:text-base font-semibold"
+                  >
+                    Braille language
+                  </Label>
+                  <Select value={languageId} onValueChange={setLanguageId}>
+                    <SelectTrigger id="language" className="w-full sm:w-64">
+                      <SelectValue placeholder="Select language" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {languages.map((l) => (
+                        <SelectItem key={l.id} value={l.id} lang={l.htmlLang}>
+                          {l.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <Label
+                    htmlFor="braille-text"
+                    className="text-sm sm:text-base font-semibold"
+                  >
+                    Text
+                  </Label>
+                  <Textarea
+                    id="braille-text"
+                    ref={textareaRef}
+                    lang={language.htmlLang}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder="Enter text to convert... (Press Enter for new lines)"
+                    className="p-4 h-10 resize-none text-base"
+                    rows={4}
+                    aria-describedby="braille-text-hint"
+                  />
+                  <p
+                    id="braille-text-hint"
+                    className="text-sm text-gray-700 dark:text-gray-300"
+                  >
+                    Type <kbd className="font-mono font-bold">\</kbd> for a full
+                    6-dot cell (⠿). For any other pattern, type the dot numbers
+                    in brackets, like{" "}
+                    <kbd className="font-mono font-bold">[1-2-5]</kbd>, or use
+                    the custom cell picker below. Press Enter for a new line.
+                  </p>
+                </div>
+
+                <details className="rounded-lg border bg-white dark:bg-gray-800 p-3">
+                  <summary className="cursor-pointer font-semibold">
+                    Custom cell picker
+                  </summary>
+                  <div className="mt-3 flex flex-col sm:flex-row items-center sm:items-end gap-4">
+                    <DotGrid
+                      label="Custom cell dots"
+                      cell={customCell}
+                      onToggle={toggleCustomDot}
+                    />
+                    <div className="flex flex-col gap-2">
+                      <p aria-live="polite">
+                        <span aria-hidden="true" className="text-4xl mr-2">
+                          {cellToUnicode(customCell)}
+                        </span>
+                        {describeCell(customCell)}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={customCell === 0}
+                        onClick={() => insertAtCursor(cellToUnicode(customCell))}
+                      >
+                        Insert cell into text
+                      </Button>
+                    </div>
+                  </div>
+                </details>
+              </div>
+            ) : (
+              <BrailleKeyboard
+                state={dotKeyboard}
+                onStateChange={setDotKeyboard}
+              />
+            )}
+
+            <BraillePreview
+              lines={lines}
+              highlightLast={
+                inputMode === "dots" && dotKeyboard.current.length > 0
+              }
+            />
+
+            <div
+              className="w-full h-72 md:h-96 sm:h-84 bg-gray-200 dark:bg-gray-800 rounded-lg overflow-hidden border"
+              role="img"
+              aria-label="3D preview of the Braille label. You can rotate and zoom it with a mouse or touch."
+            >
               <Suspense
                 fallback={
                   <div className="flex items-center justify-center h-full">
@@ -320,11 +344,12 @@ export default function HomePage() {
                 <div className="pt-2">
                   <Slider
                     value={[maxCellsPerLine]}
-                    onValueChange={handleLineLengthChange}
+                    onValueChange={(value) => setMaxCellsPerLine(value[0] || 40)}
                     min={10}
                     max={100}
                     step={1}
                     className="w-full"
+                    aria-label="Maximum characters per line"
                   />
                 </div>
               </div>
@@ -341,11 +366,12 @@ export default function HomePage() {
                   <div className="pt-2">
                     <Slider
                       value={[baseHeight]}
-                      onValueChange={handleBaseHeightChange}
+                      onValueChange={(value) => setBaseHeight(value[0] || 3.0)}
                       min={1.0}
                       max={10.0}
                       step={0.1}
                       className="w-full"
+                      aria-label="Base height"
                     />
                   </div>
                 </div>
@@ -359,11 +385,12 @@ export default function HomePage() {
                   <div className="pt-2">
                     <Slider
                       value={[paddingX]}
-                      onValueChange={handlePaddingXChange}
+                      onValueChange={(value) => setPaddingX(value[0] || 3.0)}
                       min={0.5}
                       max={10.0}
                       step={0.1}
                       className="w-full"
+                      aria-label="Padding X"
                     />
                   </div>
                 </div>
@@ -377,11 +404,12 @@ export default function HomePage() {
                   <div className="pt-2">
                     <Slider
                       value={[paddingY]}
-                      onValueChange={handlePaddingYChange}
+                      onValueChange={(value) => setPaddingY(value[0] || 3.0)}
                       min={0.5}
                       max={10.0}
                       step={0.1}
                       className="w-full"
+                      aria-label="Padding Y"
                     />
                   </div>
                 </div>
@@ -389,26 +417,33 @@ export default function HomePage() {
             </div>
             <div className="flex justify-center items-start w-full gap-2">
               <div className="flex-1">
-                <Label className="text-sm sm:text-base font-semibold">
+                <Label
+                  htmlFor="filename"
+                  className="text-sm sm:text-base font-semibold"
+                >
                   File Name
                 </Label>
                 <Input
+                  id="filename"
                   type="text"
                   value={filename}
-                  onChange={handleFilenameChange}
+                  onChange={(e) => setFilenameOverride(e.target.value)}
                   placeholder="Filename"
                   className="text-base w-full"
                 />
               </div>
               <div className="flex-1">
-                <Label className="text-sm sm:text-base font-semibold">
+                <Label
+                  htmlFor="fileType"
+                  className="text-sm sm:text-base font-semibold"
+                >
                   Export Format
                 </Label>
 
                 <Select
                   value={fileType}
                   onValueChange={(value: string) =>
-                    setFileType(value as "glb" | "gltf" | "stl")
+                    setFileType(value as FileType)
                   }
                 >
                   <SelectTrigger id="fileType" className="w-full">
@@ -422,8 +457,32 @@ export default function HomePage() {
                 </Select>
               </div>
             </div>
-            <Button onClick={handleExport}>
-              Export as .{fileType.toUpperCase()}
+            {fileType === "stl" && (
+              <ChoiceGroup<ModelVariant>
+                legend="STL type"
+                name="stl-variant"
+                value={stlVariant}
+                onChange={setStlVariant}
+                options={[
+                  {
+                    value: "print-ready",
+                    label: "Print-ready STL (recommended)",
+                    description:
+                      "One closed, watertight solid. Prints correctly in any slicer.",
+                  },
+                  {
+                    value: "standard",
+                    label: "Standard STL",
+                    description:
+                      "Base and each dot as separate closed parts, like the original generator. Some slicers merge them automatically.",
+                  },
+                ]}
+              />
+            )}
+            <Button onClick={handleExport} size="lg" className="text-base">
+              Download .{fileType.toUpperCase()}
+              {fileType === "stl" &&
+                (stlVariant === "print-ready" ? " (print-ready)" : " (standard)")}
             </Button>
           </div>
         </CardContent>
