@@ -241,7 +241,7 @@ export default function HomePage() {
                     lang={hasDevanagari(text) ? "ne" : "en"}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
-                    placeholder="Enter text to convert..."
+                    placeholder="Type in English or नेपाली..."
                     // Grows with its content (field-sizing), starting at one line.
                     // Browsers without field-sizing get a fixed 4-line box instead.
                     className="p-4 min-h-0 max-h-80 resize-none text-base bg-white dark:bg-gray-800 [@supports_not_(field-sizing:content)]:min-h-28"
