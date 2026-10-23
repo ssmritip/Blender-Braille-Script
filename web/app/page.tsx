@@ -28,8 +28,7 @@ import {
   emptyDotKeyboardState,
 } from "@/lib/braille/dotKeyboard";
 import {
-  getLanguage,
-  languages,
+  hasDevanagari,
   translateText,
   wrapLines,
 } from "@/lib/braille/translate";
@@ -64,14 +63,17 @@ const downloadBlob = (blob: Blob, filename: string) => {
 
 /** Default file name from the typed text: first line, without characters that break file names. */
 const filenameFromText = (text: string) =>
-  text.split("\n")[0].replace(/[\\/:*?"<>|]/g, "").trim().slice(0, 60);
+  text
+    .split("\n")[0]
+    .replace(/[\\/:*?"<>|]/g, "")
+    .trim()
+    .slice(0, 60);
 
 export default function HomePage() {
   const [inputMode, setInputMode] = useState<InputMode>("text");
-  const [languageId, setLanguageId] = useState("en");
   const [text, setText] = useState("Tactil.");
   const [dotKeyboard, setDotKeyboard] = useState<DotKeyboardState>(
-    emptyDotKeyboardState
+    emptyDotKeyboardState,
   );
   const [customCell, setCustomCell] = useState<Cell>(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -85,23 +87,24 @@ export default function HomePage() {
   const [fileType, setFileType] = useState<FileType>("stl");
   const [stlVariant, setStlVariant] = useState<ModelVariant>("print-ready");
 
-  const language = getLanguage(languageId);
-
   // Sliders are debounced so dragging does not rebuild the model on every step.
   const sliderValues = useMemo(
     () => ({ maxCellsPerLine, baseHeight, paddingX, paddingY }),
-    [maxCellsPerLine, baseHeight, paddingX, paddingY]
+    [maxCellsPerLine, baseHeight, paddingX, paddingY],
   );
   const params = useDebouncedValue(sliderValues, 200);
+  // Typed text is debounced too: translating and rebuilding the 3D model on
+  // every keystroke makes typing lag.
+  const debouncedText = useDebouncedValue(text, 250);
 
   // Braille cells, wrapped exactly as they will be printed.
   const lines = useMemo(() => {
     const source =
       inputMode === "text"
-        ? translateText(text, languageId)
+        ? translateText(debouncedText)
         : [dotKeyboardCells(dotKeyboard)];
     return wrapLines(source, params.maxCellsPerLine);
-  }, [inputMode, text, languageId, dotKeyboard, params.maxCellsPerLine]);
+  }, [inputMode, debouncedText, dotKeyboard, params.maxCellsPerLine]);
 
   // The preview always shows the print-ready model; both variants look the same.
   const model = useMemo(() => {
@@ -147,7 +150,7 @@ export default function HomePage() {
 
         downloadBlob(
           new Blob([stl.buffer as ArrayBuffer], { type: "model/stl" }),
-          `${name}.stl`
+          `${name}.stl`,
         );
         return;
       }
@@ -168,10 +171,10 @@ export default function HomePage() {
         (error) => {
           console.error("An error happened during parsing", error);
           alert(
-            "Failed to export 3D model. Please try again or refresh the page."
+            "Failed to export 3D model. Please try again or refresh the page.",
           );
         },
-        { binary: fileType === "glb" }
+        { binary: fileType === "glb" },
       );
     } catch (error) {
       console.error("Export error:", error);
@@ -211,7 +214,8 @@ export default function HomePage() {
                 {
                   value: "text",
                   label: "Text",
-                  description: "Type words; they are translated to Braille.",
+                  description:
+                    "Type English or Nepali words (or both); they are translated to Braille.",
                 },
                 {
                   value: "dots",
@@ -226,27 +230,6 @@ export default function HomePage() {
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-2">
                   <Label
-                    htmlFor="language"
-                    className="text-sm sm:text-base font-semibold"
-                  >
-                    Braille language
-                  </Label>
-                  <Select value={languageId} onValueChange={setLanguageId}>
-                    <SelectTrigger id="language" className="w-full sm:w-64">
-                      <SelectValue placeholder="Select language" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {languages.map((l) => (
-                        <SelectItem key={l.id} value={l.id} lang={l.htmlLang}>
-                          {l.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <Label
                     htmlFor="braille-text"
                     className="text-sm sm:text-base font-semibold"
                   >
@@ -255,12 +238,14 @@ export default function HomePage() {
                   <Textarea
                     id="braille-text"
                     ref={textareaRef}
-                    lang={language.htmlLang}
+                    lang={hasDevanagari(text) ? "ne" : "en"}
                     value={text}
                     onChange={(e) => setText(e.target.value)}
-                    placeholder="Enter text to convert... (Press Enter for new lines)"
-                    className="p-4 h-10 resize-none text-base"
-                    rows={4}
+                    placeholder="Enter text to convert..."
+                    // Grows with its content (field-sizing), starting at one line.
+                    // Browsers without field-sizing get a fixed 4-line box instead.
+                    className="p-4 min-h-0 max-h-80 resize-none text-base bg-white dark:bg-gray-800 [@supports_not_(field-sizing:content)]:min-h-28"
+                    rows={1}
                     aria-describedby="braille-text-hint"
                   />
                   <p
@@ -268,10 +253,9 @@ export default function HomePage() {
                     className="text-sm text-gray-700 dark:text-gray-300"
                   >
                     Type <kbd className="font-mono font-bold">\</kbd> for a full
-                    6-dot cell (⠿). For any other pattern, type the dot numbers
-                    in brackets, like{" "}
-                    <kbd className="font-mono font-bold">[1-2-5]</kbd>, or use
-                    the custom cell picker below. Press Enter for a new line.
+                    cell (⠿), or dot numbers in brackets like{" "}
+                    <kbd className="font-mono font-bold">[1-2-3-4]</kbd> for any
+                    cell.
                   </p>
                 </div>
 
@@ -296,7 +280,9 @@ export default function HomePage() {
                         type="button"
                         variant="outline"
                         disabled={customCell === 0}
-                        onClick={() => insertAtCursor(cellToUnicode(customCell))}
+                        onClick={() =>
+                          insertAtCursor(cellToUnicode(customCell))
+                        }
                       >
                         Insert cell into text
                       </Button>
@@ -333,156 +319,168 @@ export default function HomePage() {
                 <Braille3DViewer model={model} />
               </Suspense>
             </div>
-            <div className="flex gap-4 items-end">
-              <div className="flex-1">
-                <Label className="text-sm sm:text-base font-semibold flex">
-                  <div className="">Maximum Characters Per Line: </div>
-                  <div className="font-medium text-xs sm:text-base">
-                    {maxCellsPerLine} ({(maxCellsPerLine * 7).toFixed(1)} units)
+            <section
+              aria-label="Label and file settings"
+              className="flex flex-col gap-4 rounded-lg border bg-white dark:bg-gray-800 p-4"
+            >
+              <div className="flex gap-4 items-end">
+                <div className="flex-1">
+                  <Label className="text-sm sm:text-base font-semibold flex">
+                    <div className="">Maximum Characters Per Line: </div>
+                    <div className="font-medium text-xs sm:text-base">
+                      {maxCellsPerLine} ({(maxCellsPerLine * 7).toFixed(1)}{" "}
+                      units)
+                    </div>
+                  </Label>
+                  <div className="pt-2">
+                    <Slider
+                      value={[maxCellsPerLine]}
+                      onValueChange={(value) =>
+                        setMaxCellsPerLine(value[0] || 40)
+                      }
+                      min={10}
+                      max={100}
+                      step={1}
+                      className="w-full"
+                      aria-label="Maximum characters per line"
+                    />
                   </div>
-                </Label>
-                <div className="pt-2">
-                  <Slider
-                    value={[maxCellsPerLine]}
-                    onValueChange={(value) => setMaxCellsPerLine(value[0] || 40)}
-                    min={10}
-                    max={100}
-                    step={1}
-                    className="w-full"
-                    aria-label="Maximum characters per line"
+                </div>
+              </div>
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex-1">
+                    <Label className="text-sm sm:text-base font-semibold flex">
+                      <div className="">Base Height: </div>
+                      <div className="font-medium text-xs sm:text-base">
+                        {baseHeight.toFixed(1)} units
+                      </div>
+                    </Label>
+                    <div className="pt-2">
+                      <Slider
+                        value={[baseHeight]}
+                        onValueChange={(value) =>
+                          setBaseHeight(value[0] || 3.0)
+                        }
+                        min={1.0}
+                        max={10.0}
+                        step={0.1}
+                        className="w-full"
+                        aria-label="Base height"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-sm sm:text-base font-semibold flex">
+                      <div className="">Padding X: </div>
+                      <div className="font-medium text-xs sm:text-base">
+                        {paddingX.toFixed(1)} units
+                      </div>
+                    </Label>
+                    <div className="pt-2">
+                      <Slider
+                        value={[paddingX]}
+                        onValueChange={(value) => setPaddingX(value[0] || 3.0)}
+                        min={0.5}
+                        max={10.0}
+                        step={0.1}
+                        className="w-full"
+                        aria-label="Padding X"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-sm sm:text-base font-semibold flex">
+                      <div className="">Padding Y: </div>
+                      <div className="font-medium text-xs sm:text-base">
+                        {paddingY.toFixed(1)} units
+                      </div>
+                    </Label>
+                    <div className="pt-2">
+                      <Slider
+                        value={[paddingY]}
+                        onValueChange={(value) => setPaddingY(value[0] || 3.0)}
+                        min={0.5}
+                        max={10.0}
+                        step={0.1}
+                        className="w-full"
+                        aria-label="Padding Y"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-center items-start w-full gap-2">
+                <div className="flex-1">
+                  <Label
+                    htmlFor="filename"
+                    className="text-sm sm:text-base font-semibold"
+                  >
+                    File Name
+                  </Label>
+                  <Input
+                    id="filename"
+                    type="text"
+                    value={filename}
+                    onChange={(e) => setFilenameOverride(e.target.value)}
+                    placeholder="Filename"
+                    className="text-base w-full"
                   />
                 </div>
-              </div>
-            </div>
-            <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="flex-1">
-                  <Label className="text-sm sm:text-base font-semibold flex">
-                    <div className="">Base Height: </div>
-                    <div className="font-medium text-xs sm:text-base">
-                      {baseHeight.toFixed(1)} units
-                    </div>
+                  <Label
+                    htmlFor="fileType"
+                    className="text-sm sm:text-base font-semibold"
+                  >
+                    Export Format
                   </Label>
-                  <div className="pt-2">
-                    <Slider
-                      value={[baseHeight]}
-                      onValueChange={(value) => setBaseHeight(value[0] || 3.0)}
-                      min={1.0}
-                      max={10.0}
-                      step={0.1}
-                      className="w-full"
-                      aria-label="Base height"
-                    />
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <Label className="text-sm sm:text-base font-semibold flex">
-                    <div className="">Padding X: </div>
-                    <div className="font-medium text-xs sm:text-base">
-                      {paddingX.toFixed(1)} units
-                    </div>
-                  </Label>
-                  <div className="pt-2">
-                    <Slider
-                      value={[paddingX]}
-                      onValueChange={(value) => setPaddingX(value[0] || 3.0)}
-                      min={0.5}
-                      max={10.0}
-                      step={0.1}
-                      className="w-full"
-                      aria-label="Padding X"
-                    />
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <Label className="text-sm sm:text-base font-semibold flex">
-                    <div className="">Padding Y: </div>
-                    <div className="font-medium text-xs sm:text-base">
-                      {paddingY.toFixed(1)} units
-                    </div>
-                  </Label>
-                  <div className="pt-2">
-                    <Slider
-                      value={[paddingY]}
-                      onValueChange={(value) => setPaddingY(value[0] || 3.0)}
-                      min={0.5}
-                      max={10.0}
-                      step={0.1}
-                      className="w-full"
-                      aria-label="Padding Y"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div className="flex justify-center items-start w-full gap-2">
-              <div className="flex-1">
-                <Label
-                  htmlFor="filename"
-                  className="text-sm sm:text-base font-semibold"
-                >
-                  File Name
-                </Label>
-                <Input
-                  id="filename"
-                  type="text"
-                  value={filename}
-                  onChange={(e) => setFilenameOverride(e.target.value)}
-                  placeholder="Filename"
-                  className="text-base w-full"
-                />
-              </div>
-              <div className="flex-1">
-                <Label
-                  htmlFor="fileType"
-                  className="text-sm sm:text-base font-semibold"
-                >
-                  Export Format
-                </Label>
 
-                <Select
-                  value={fileType}
-                  onValueChange={(value: string) =>
-                    setFileType(value as FileType)
-                  }
-                >
-                  <SelectTrigger id="fileType" className="w-full">
-                    <SelectValue placeholder="Select format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="glb">GLB (.glb)</SelectItem>
-                    <SelectItem value="gltf">GLTF (.gltf)</SelectItem>
-                    <SelectItem value="stl">STL (.stl)</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <Select
+                    value={fileType}
+                    onValueChange={(value: string) =>
+                      setFileType(value as FileType)
+                    }
+                  >
+                    <SelectTrigger id="fileType" className="w-full">
+                      <SelectValue placeholder="Select format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="glb">GLB (.glb)</SelectItem>
+                      <SelectItem value="gltf">GLTF (.gltf)</SelectItem>
+                      <SelectItem value="stl">STL (.stl)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
-            </div>
-            {fileType === "stl" && (
-              <ChoiceGroup<ModelVariant>
-                legend="STL type"
-                name="stl-variant"
-                value={stlVariant}
-                onChange={setStlVariant}
-                options={[
-                  {
-                    value: "print-ready",
-                    label: "Print-ready STL (recommended)",
-                    description:
-                      "One closed, watertight solid. Prints correctly in any slicer.",
-                  },
-                  {
-                    value: "standard",
-                    label: "Standard STL",
-                    description:
-                      "Base and each dot as separate closed parts, like the original generator. Some slicers merge them automatically.",
-                  },
-                ]}
-              />
-            )}
+              {fileType === "stl" && (
+                <ChoiceGroup<ModelVariant>
+                  legend="STL type"
+                  name="stl-variant"
+                  value={stlVariant}
+                  onChange={setStlVariant}
+                  options={[
+                    {
+                      value: "print-ready",
+                      label: "Print-ready STL (recommended)",
+                      description:
+                        "One closed, watertight solid. Prints correctly in any slicer.",
+                    },
+                    {
+                      value: "standard",
+                      label: "Standard STL",
+                      description:
+                        "Base and each dot as separate closed parts, like the original generator. Some slicers merge them automatically.",
+                    },
+                  ]}
+                />
+              )}
+            </section>
             <Button onClick={handleExport} size="lg" className="text-base">
               Download .{fileType.toUpperCase()}
               {fileType === "stl" &&
-                (stlVariant === "print-ready" ? " (print-ready)" : " (standard)")}
+                (stlVariant === "print-ready"
+                  ? " (print-ready)"
+                  : " (standard)")}
             </Button>
           </div>
         </CardContent>

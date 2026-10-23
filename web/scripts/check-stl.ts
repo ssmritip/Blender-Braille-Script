@@ -15,14 +15,14 @@ interface Sample {
   expectDots?: number;
 }
 
-const text = (t: string, lang = "en") => wrapLines(translateText(t, lang), 40);
+const text = (t: string) => wrapLines(translateText(t), 40);
 
 const samples: Sample[] = [
   { name: "English 'Tactil.'", lines: text("Tactil."), expectDots: 20 },
   { name: "Eight backslashes", lines: text("\\\\\\\\\\\\\\\\"), expectDots: 48 },
   { name: "Custom cells [1-2-5] ⠿", lines: text("[1-2-5] ⠿ [36]"), expectDots: 11 },
-  { name: "Multi-line + wrap", lines: wrapLines(translateText("Hello World 2026\nline two", "en"), 10) },
-  { name: "Nepali", lines: text("नमस्ते क्षमा ज्ञान १२३", "ne") },
+  { name: "Multi-line + wrap", lines: wrapLines(translateText("Hello World 2026\nline two"), 10) },
+  { name: "Nepali", lines: text("नमस्ते क्षमा ज्ञान १२३") },
   {
     name: "Dot keyboard cells",
     lines: wrapLines([[dots(1), 0, dots(1, 2), FULL_CELL, 0, 0, dots(3, 6)]], 40),

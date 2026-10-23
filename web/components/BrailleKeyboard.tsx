@@ -115,10 +115,11 @@ export function BrailleKeyboard({ state, onStateChange }: BrailleKeyboardProps) 
           Space or Enter finishes the cell, or adds a space if the cell is empty.
           Backspace removes the last dot or cell.
         </p>
+        {/* Always rendered so screen readers pick up the first message; hidden until then. */}
         <p
           role="status"
           aria-live="polite"
-          className="mt-2 min-h-6 text-base font-medium"
+          className={status.message ? "mt-2 text-base font-medium" : "sr-only"}
         >
           {status.message}
           {status.count % 2 === 1 ? " " : ""}
